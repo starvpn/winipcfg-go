@@ -51,6 +51,31 @@ func runNetsh(cmds []string) error {
 	return nil
 }
 
+func runNetshResult(cmds []string) (string, error) {
+	system32, err := windows.GetSystemDirectory()
+	if err != nil {
+		return "", fmt.Errorf("runNetshResult GetSystemDirectory - %w", err)
+	}
+	cmd := exec.Command(system32 + "\\netsh.exe") // I wish we could append (, "-f", "CONIN$") but Go sets up the process context wrong.
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return "", fmt.Errorf("runNetshResult stdin pipe - %w", err)
+	}
+	go func() {
+		defer stdin.Close()
+		io.WriteString(stdin, strings.Join(append(cmds, "exit\r\n"), "\r\n"))
+	}()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("runNetshResult run - %w", err)
+	}
+	// Horrible kludges, sorry.
+	cleaned := bytes.ReplaceAll(output, []byte("netsh>"), []byte{})
+
+	return ConvertByte2String(cleaned, GB18030), nil
+}
+
 func flushDnsCmds(ifc *Interface) []string {
 	return []string{
 		fmt.Sprintf("interface ipv4 set dnsservers name=%d source=static address=none validate=no register=both", ifc.Index),
@@ -72,4 +97,70 @@ func addDnsCmds(ifc *Interface, dnses []net.IP) []string {
 		j++
 	}
 	return cmds[:j]
+}
+
+func RunNetsh(cmds []string) error {
+	return runNetsh(cmds)
+}
+
+const (
+	netshCmdTemplateEnablingInterface  = "interface set interface %s admin=enable"
+	netshCmdTemplateDisablingInterface = "interface set interface %s admin=disable"
+	netshCmdTemplateStatusInterface    = "interface show interface %s"
+)
+
+// 开启网卡
+func EnablingInterface(interfaceName string) error {
+	//netsh interface set interface "StarVPN" admin=enable
+	return runNetsh([]string{fmt.Sprintf(netshCmdTemplateEnablingInterface, interfaceName)})
+}
+
+// 禁用网卡
+func DisablingInterface(interfaceName string) error {
+	//netsh interface set interface "StarVPN" admin=disable
+	return runNetsh([]string{fmt.Sprintf(netshCmdTemplateDisablingInterface, interfaceName)})
+}
+
+type InterfaceStatus uint32
+
+var (
+	// 禁用
+	INTERFACE_STATUS_DISABLED InterfaceStatus = 0
+	// 启用
+	INTERFACE_STATUS_ENABLED InterfaceStatus = 1
+	// 已连接
+	INTERFACE_STATUS_CONNECTED InterfaceStatus = 2
+	// 未知
+	INTERFACE_STATUS_UNKNOWN InterfaceStatus = 3
+)
+
+// 查看网卡状态 0-
+func FindInterfaceStatus(interfaceName string) (InterfaceStatus, error) {
+	//netsh interface show interface "StarVPN"
+	result, err := runNetshResult([]string{fmt.Sprintf(netshCmdTemplateStatusInterface, interfaceName)})
+	if err != nil {
+		return INTERFACE_STATUS_UNKNOWN, err
+	}
+	lines := strings.Split(result, "\n")
+	for _, line := range lines {
+		// 去除空格
+		line = strings.TrimSpace(line)
+		// 按:分割
+		parts := strings.Split(line, ":")
+		if len(parts) != 2 {
+			continue
+		}
+		if strings.TrimSpace(parts[0]) == "管理状态" {
+			statusStr := strings.TrimSpace(parts[1])
+			if statusStr == "已禁用" {
+				return INTERFACE_STATUS_DISABLED, nil
+			}
+		} else if strings.TrimSpace(parts[0]) == "连接状态" {
+			statusStr := strings.TrimSpace(parts[1])
+			if statusStr == "已连接" {
+				return INTERFACE_STATUS_CONNECTED, nil
+			}
+		}
+	}
+	return INTERFACE_STATUS_ENABLED, nil
 }

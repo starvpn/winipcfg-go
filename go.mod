@@ -2,4 +2,7 @@ module github.com/starvpn/winipcfg-go
 
 go 1.13
 
-require golang.org/x/sys v0.0.0-20190310054646-10058d7d4faa
+require (
+	golang.org/x/sys v0.20.0
+	golang.org/x/text v0.17.0
+)
