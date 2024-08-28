@@ -1,4 +1,4 @@
-module github.com/tailscale/winipcfg-go
+module github.com/starvpn/winipcfg-go
 
 go 1.13
 
