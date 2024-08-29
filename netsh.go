@@ -9,7 +9,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 	"net"
 	"os/exec"
 	"strings"
@@ -34,7 +35,12 @@ func runNetsh(cmds []string) error {
 	}
 	go func() {
 		defer stdin.Close()
-		io.WriteString(stdin, strings.Join(append(cmds, "exit\r\n"), "\r\n"))
+		encoder := simplifiedchinese.GB18030.NewEncoder()
+		transformedInput := transform.NewWriter(stdin, encoder)
+		_, writeErr := transformedInput.Write([]byte(strings.Join(append(cmds, "exit\r\n"), "\r\n")))
+		if writeErr != nil {
+			fmt.Println(writeErr)
+		}
 	}()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -64,10 +70,19 @@ func runNetshResult(cmds []string) (string, error) {
 	}
 	go func() {
 		defer stdin.Close()
-		io.WriteString(stdin, strings.Join(append(cmds, "exit\r\n"), "\r\n"))
+		// 如果有中文，需要设置编码
+		// 设置编码为GB18030
+		encoder := simplifiedchinese.GB18030.NewEncoder()
+		transformedInput := transform.NewWriter(stdin, encoder)
+		_, writeErr := transformedInput.Write([]byte(strings.Join(append(cmds, "exit\r\n"), "\r\n")))
+		if writeErr != nil {
+			fmt.Println(writeErr)
+		}
+		//io.WriteString(stdin, strings.Join(append(cmds, "exit\r\n"), "\r\n"))
 	}()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		fmt.Println(ConvertByte2String(output, GB18030))
 		return "", fmt.Errorf("runNetshResult run - %w", err)
 	}
 	// Horrible kludges, sorry.
@@ -163,4 +178,13 @@ func FindInterfaceStatus(interfaceName string) (InterfaceStatus, error) {
 		}
 	}
 	return INTERFACE_STATUS_ENABLED, nil
+}
+
+// 修改网卡名称
+func RenameInterface(oldName, newName string) error {
+	_, err := runNetshResult([]string{fmt.Sprintf("interface set interface name=\"%s\" newname=\"%s\"", oldName, newName)})
+	if err != nil {
+		return err
+	}
+	return nil
 }
