@@ -114,8 +114,8 @@ func addDnsCmds(ifc *Interface, dnses []net.IP) []string {
 	return cmds[:j]
 }
 
-func RunNetsh(cmds []string) error {
-	return runNetsh(cmds)
+func RunNetsh(cmds []string) (string, error) {
+	return runNetshResult(cmds)
 }
 
 const (
@@ -127,13 +127,15 @@ const (
 // 开启网卡
 func EnablingInterface(interfaceName string) error {
 	//netsh interface set interface "StarVPN" admin=enable
-	return runNetsh([]string{fmt.Sprintf(netshCmdTemplateEnablingInterface, interfaceName)})
+	_, err := runNetshResult([]string{fmt.Sprintf(netshCmdTemplateEnablingInterface, interfaceName)})
+	return err
 }
 
 // 禁用网卡
 func DisablingInterface(interfaceName string) error {
 	//netsh interface set interface "StarVPN" admin=disable
-	return runNetsh([]string{fmt.Sprintf(netshCmdTemplateDisablingInterface, interfaceName)})
+	_, err := runNetshResult([]string{fmt.Sprintf(netshCmdTemplateDisablingInterface, interfaceName)})
+	return err
 }
 
 type InterfaceStatus uint32
