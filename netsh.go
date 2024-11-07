@@ -9,12 +9,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 	"net"
 	"os/exec"
 	"strings"
 	"syscall"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 
 	"golang.org/x/sys/windows"
 )
@@ -55,6 +56,14 @@ func runNetsh(cmds []string) error {
 			strings.Join(cmds, "\n"), bytes.ReplaceAll(output, []byte{'\r', '\n'}, []byte{'\n'})))
 	}
 	return nil
+}
+
+func getNetshPath() (string, error) {
+	system32, err := windows.GetSystemDirectory()
+	if err != nil {
+		return "", err
+	}
+	return system32 + "\\netsh.exe", nil
 }
 
 func runNetshResult(cmds []string) (string, error) {
@@ -184,9 +193,11 @@ func FindInterfaceStatus(interfaceName string) (InterfaceStatus, error) {
 
 // 修改网卡名称
 func RenameInterface(oldName, newName string) error {
-	_, err := runNetshResult([]string{fmt.Sprintf("interface set interface name=\"%s\" newname=\"%s\"", oldName, newName)})
+	netshExe, err := getNetshPath()
 	if err != nil {
-		return err
+		return fmt.Errorf("getNetshPath - %w", err)
 	}
-	return nil
+	//netsh interface set interface name=本地连接 newname=123
+	c := exec.Command(netshExe, "interface", "set", "interface", "name="+oldName, "newname="+newName)
+	return c.Run()
 }
