@@ -199,5 +199,6 @@ func RenameInterface(oldName, newName string) error {
 	}
 	//netsh interface set interface name=本地连接 newname=123
 	c := exec.Command(netshExe, "interface", "set", "interface", "name="+oldName, "newname="+newName)
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return c.Run()
 }
